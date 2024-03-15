@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
+#include<wordexp.h>
 #define MAX_COMMAND_LENGTH 100
 #define MAX_ARGS 5
 
@@ -48,6 +49,11 @@ int main() {
         while (token != NULL && argsC < MAX_ARGS) {
             argsArray[argsC++] = token;
             token = strtok(NULL, " ");
+        }
+
+        if (token != NULL) {
+            printf("Error: Incorrect number of arguments should be >=1 and <=5\n");
+            continue; 
         }
 
         argsArray[argsC] = NULL;
