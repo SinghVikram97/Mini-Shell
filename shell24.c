@@ -4,7 +4,39 @@
 #include <string.h>
 #include <sys/wait.h>
 #include<wordexp.h>
+#include<fcntl.h>
+#include<ctype.h>
 #define MAX_COMMAND_LENGTH 100
+
+void trimWhitespace(char *str) {
+    if (str == NULL) {
+        return;
+    }
+
+    int len = strlen(str);
+    int start = 0;
+    int end = len - 1;
+
+    // Trim leading whitespace
+    while (isspace(str[start])) {
+        start++;
+    }
+
+    // Trim trailing whitespace
+    while (end > start && isspace(str[end])) {
+        end--;
+    }
+
+    // Shift characters to the beginning of the string
+    int shift = 0;
+    for (int i = start; i <= end; i++) {
+        str[i - start] = str[i];
+        shift++;
+    }
+
+    // Null-terminate the trimmed string
+    str[shift] = '\0';
+}
 
 void executeCommand(char *argsArray[]) {
     int pid = fork();
@@ -226,6 +258,94 @@ void processNormalCommand(char input[]){
     executeCommand(argsArray);
 }
 
+void processNormalCommandWithInputFile(char *command, char *inputFile){
+    int MAX_ARGS=5;
+    char *argsArray[MAX_ARGS + 1];
+    int argsC;
+
+    argsC = 0;
+    char *token = strtok(command, " ");
+    while (token != NULL && argsC < MAX_ARGS) {
+        argsArray[argsC++] = token;
+        token = strtok(NULL, " ");
+    }
+
+    if (token != NULL) {
+        printf("Error: Incorrect number of arguments should be >=1 and <=5\n");
+        return;
+    }
+
+    argsArray[argsC] = NULL;
+    expandHomeDirectory(argsArray);
+    
+    int fd = open(inputFile, O_RDONLY);
+    if (fd == -1) {
+        printf("Error opening input file");
+        exit(1);
+    }
+
+    int pid = fork();
+    if (pid == -1) {
+        printf("Fork failed");
+        close(fd);
+        exit(1);
+    }
+
+    if (pid == 0) {
+        // Child process
+        // Redirect standard input to the input file
+        if (dup2(fd, STDIN_FILENO) == -1) {
+            printf("Error redirecting input");
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+
+        // Close the file descriptor since it's no longer needed in the child process
+        close(fd);
+
+        // Execute the command
+        if (execvp(argsArray[0], argsArray) == -1) {
+            perror("Execution of command failed");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+        close(fd);
+    }
+}
+
+void processRedirection(char input[]){
+    int inputRedirection=0;
+    int outputRedirection=0;
+    int outputAppendRedirection=0;
+    for(int i = 0; i < strlen(input); i++){
+        if(input[i] == '<'){
+            inputRedirection = 1;
+        } else if(input[i] == '>'){
+            if(i+1 < strlen(input) && input[i + 1] == '>'){
+                outputAppendRedirection = 1;
+                i++;
+            } else {
+                outputRedirection = 1;
+            }
+        }
+    }
+
+    if(inputRedirection==1){
+        int MAX_ARGS=5;
+        int argsCount = 0;
+        char *command = strtok(input, "<");
+        char *file = strtok(NULL, "<");
+
+        trimWhitespace(command);
+        trimWhitespace(file);
+
+        processNormalCommandWithInputFile(command,file);
+    }
+}
+
 int main() {
     // string
     char input[MAX_COMMAND_LENGTH];
@@ -239,13 +359,18 @@ int main() {
         }
 
         int concatenate = 0;
-        int piping=0;
-        for(int i=0;i<strlen(input);i++){
-            if (input[i]=='#') {
+        int piping = 0;
+        int redirect = 0;
+
+        for (int i = 0; i < strlen(input); i++) {
+            if (input[i] == '|') {
+                piping = 1;
+                break;
+            } else if (input[i] == '#') {
                 concatenate = 1;
                 break;
-            }else if(input[i]=='|'){
-                piping=1;
+            } else if (input[i] == '>' || input[i] == '<') {
+                redirect = 1;
                 break;
             }
         }
@@ -253,6 +378,8 @@ int main() {
             processFileConcatenation(input);
         }else if(piping==1){
             processPipeOperation(input);
+        }else if(redirect==1){
+            processRedirection(input);
         }else{
             processNormalCommand(input);
         }
