@@ -66,6 +66,115 @@ void executeCatCommand(char *fileName) {
 
 }
 
+void processPipeOperation(char input[]) {
+    const int MAX_PIPES = 6; // Maximum number of pipes
+    const int MAX_COMMANDS = MAX_PIPES + 1; // Maximum number of commands including the first one
+    const int MAX_ARGS = 5; // Maximum number of arguments per command
+
+    char *commands[MAX_COMMANDS]; // Array to store commands
+
+    // Tokenize input based on "|"
+    int numCommands = 0;
+    char *token = strtok(input, "|");
+    while (token != NULL && numCommands < MAX_COMMANDS) {
+        // Trim leading and trailing whitespace from the command
+        char *trimmedCommand = token;
+        while (*trimmedCommand == ' ' || *trimmedCommand == '\t')
+            ++trimmedCommand;
+        size_t length = strlen(trimmedCommand);
+        while (length > 0 && (trimmedCommand[length - 1] == ' ' || trimmedCommand[length - 1] == '\t'))
+            trimmedCommand[--length] = '\0';
+        if (length > 0) {
+            commands[numCommands++] = trimmedCommand;
+        }
+        token = strtok(NULL, "|");
+    }
+
+    // Check if more commands present after tokenization limit
+    if (token != NULL) {
+        printf("Error: Too many pipe commands (up to 6 operations)\n");
+        return;
+    }
+
+    // Create pipes
+    int pipes[MAX_PIPES][2];
+    for (int i = 0; i < MAX_PIPES; i++) {
+        if (pipe(pipes[i]) == -1) {
+            perror("Pipe creation failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Execute commands
+    for (int i = 0; i < numCommands; i++) {
+        int argsCount = 0;
+        char *argsArray[MAX_ARGS + 1]; // Argument array for execvp
+
+        // Tokenize the command based on spaces
+        char *arg = strtok(commands[i], " ");
+        while (arg != NULL && argsCount < MAX_ARGS) {
+            argsArray[argsCount++] = arg;
+            arg = strtok(NULL, " ");
+        }
+
+        // Null-terminate the argument array
+        argsArray[argsCount] = NULL;
+
+        // Check if the number of arguments exceeds the limit
+        if (argsCount >= MAX_ARGS) {
+            printf("Error: Too many arguments for command %d (up to 5 arguments allowed)\n", i + 1);
+            return;
+        }
+
+        // Fork a child process for each command
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            // Child process
+            if (i != 0) {
+                // Redirect stdin from the read end of the previous pipe
+                if (dup2(pipes[i - 1][0], STDIN_FILENO) == -1) {
+                    perror("Dup2 failed");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            if (i != numCommands - 1) {
+                // Redirect stdout to the write end of the current pipe
+                if (dup2(pipes[i][1], STDOUT_FILENO) == -1) {
+                    perror("Dup2 failed");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            // Close all pipe ends
+            for (int j = 0; j < MAX_PIPES; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            // Execute the command
+            if (execvp(argsArray[0], argsArray) == -1) {
+                perror("Execution of command failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    // Close all pipe ends in the parent process
+    for (int i = 0; i < MAX_PIPES; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+
+    // Wait for all child processes to finish
+    for (int i = 0; i < numCommands; i++) {
+        wait(NULL);
+    }
+}
+
 void processFileConcatenation(char input[]){
     // Max 5 operations 
     // ie. max 5 #
@@ -130,14 +239,20 @@ int main() {
         }
 
         int concatenate = 0;
+        int piping=0;
         for(int i=0;i<strlen(input);i++){
             if (input[i]=='#') {
                 concatenate = 1;
+                break;
+            }else if(input[i]=='|'){
+                piping=1;
                 break;
             }
         }
         if(concatenate==1){
             processFileConcatenation(input);
+        }else if(piping==1){
+            processPipeOperation(input);
         }else{
             processNormalCommand(input);
         }
