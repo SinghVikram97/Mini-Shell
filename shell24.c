@@ -27,6 +27,35 @@ void executeCommand(char *argsArray[]) {
     }
 }
 
+void expandHomeDirectory(char *argsArray[]) {
+    char *homeDir = getenv("HOME");
+    if (homeDir == NULL) {
+        printf("Error: HOME environment variable not set\n");
+        return;
+    }
+
+    size_t homeDirLength = strlen(homeDir);
+
+    for (int i = 0; argsArray[i] != NULL; i++) {
+        if (strcmp(argsArray[i], "~") == 0) {
+            // Expand ~ to home directory
+            argsArray[i] = homeDir;
+        }
+        else if (strncmp(argsArray[i], "~/", 2) == 0) {
+            // Expand ~/ to home directory + remaining path
+            size_t pathLength = strlen(argsArray[i]) - 1; // Exclude ~
+            char *expandedPath = malloc(homeDirLength + pathLength + 1); // +1 for null terminator
+            if (expandedPath == NULL) {
+                printf("Error: Memory allocation failed\n");
+                return;
+            }
+            strcpy(expandedPath, homeDir);
+            strcat(expandedPath, argsArray[i] + 1); // Skip '~'
+            argsArray[i] = expandedPath;
+        }
+    }
+}
+
 
 
 int main() {
@@ -57,6 +86,11 @@ int main() {
         }
 
         argsArray[argsC] = NULL;
+        expandHomeDirectory(argsArray);
+        printf("Arguments after expansion:\n");
+        for (int i = 0; argsArray[i] != NULL; i++) {
+            printf("%s\n", argsArray[i]);
+        }
         executeCommand(argsArray);
     }
     return 0;
