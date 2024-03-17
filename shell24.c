@@ -6,6 +6,8 @@
 #include<wordexp.h>
 #include<fcntl.h>
 #include<ctype.h>
+#include <sys/stat.h>
+
 #define MAX_COMMAND_LENGTH 100
 
 void trimWhitespace(char *str) {
@@ -316,6 +318,65 @@ void processNormalCommandWithInputFile(char *command, char *inputFile){
     }
 }
 
+void processNormalCommandWithOutputFile(char *command, char *outputFile){
+    int MAX_ARGS=5;
+    char *argsArray[MAX_ARGS + 1];
+    int argsC;
+
+    argsC = 0;
+    char *token = strtok(command, " ");
+    while (token != NULL && argsC < MAX_ARGS) {
+        argsArray[argsC++] = token;
+        token = strtok(NULL, " ");
+    }
+
+    if (token != NULL) {
+        printf("Error: Incorrect number of arguments should be >=1 and <=5\n");
+        return;
+    }
+
+    argsArray[argsC] = NULL;
+    expandHomeDirectory(argsArray);
+    
+    umask(0);
+    int fd = open(outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (fd == -1) {
+        perror("Error opening output file");
+        exit(1);
+    }
+
+    int pid = fork();
+    if (pid == -1) {
+        printf("Fork failed");
+        close(fd);
+        exit(1);
+    }
+
+    if (pid == 0) {
+        // Child process
+        // Redirect standard input to the input file
+        if (dup2(fd, STDOUT_FILENO) == -1) {
+            printf("Error redirecting input\n");
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+
+        // Close the file descriptor since it's no longer needed in the child process
+        close(fd);
+
+        // Execute the command
+        if (execvp(argsArray[0], argsArray) == -1) {
+            perror("Execution of command failed");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+        close(fd);
+    }
+}
+
 void processRedirection(char input[]){
     int inputRedirection=0;
     int outputRedirection=0;
@@ -343,6 +404,16 @@ void processRedirection(char input[]){
         trimWhitespace(file);
 
         processNormalCommandWithInputFile(command,file);
+    }else if(outputRedirection==1){
+        int MAX_ARGS=5;
+        int argsCount = 0;
+        char *command = strtok(input, ">");
+        char *file = strtok(NULL, ">");
+
+        trimWhitespace(command);
+        trimWhitespace(file);
+
+        processNormalCommandWithOutputFile(command,file);
     }
 }
 
