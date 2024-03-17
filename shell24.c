@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 
 #define MAX_COMMAND_LENGTH 100
+int background_processes[100];
+int background_process_count = 0;
 
 void trimWhitespace(char *str) {
     if (str == NULL) {
@@ -616,7 +618,7 @@ void executeCommandInBackground(char *argsArray[]){
     }
 
     if (pid > 0) {
-       // don't wait
+       background_processes[background_process_count++] = pid;
     } else {
         int resultOfExec = execvp(argsArray[0], argsArray);
         if (resultOfExec == -1) {
@@ -648,6 +650,22 @@ void processBackgroundExecution(char input[]){
     executeCommandInBackground(argsArray);
 }
 
+void bringLastBackgroundProcessToForeground() {
+    if (background_process_count == 0) {
+        printf("No background processes to bring to foreground\n");
+        return;
+    }
+
+    int pid = background_processes[background_process_count - 1];
+    int status;
+
+    // Wait for the background process to finish
+    waitpid(pid, &status, 0);
+
+    // Remove the background process from the list
+    background_process_count--;
+}
+
 int main() {
     // string
     char input[MAX_COMMAND_LENGTH];
@@ -659,7 +677,6 @@ int main() {
         if (input[strlen(input) - 1] == '\n') {
             input[strlen(input) - 1] = '\0';
         }
-
         int concatenate = 0;
         int piping = 0;
         int redirect = 0;
@@ -693,7 +710,10 @@ int main() {
                 sequential=1;
             }
         }
-        if(concatenate==1){
+        if(strcmp("fg",input)==0){
+            bringLastBackgroundProcessToForeground();
+        }
+        else if(concatenate==1){
             processFileConcatenation(input);
         }else if(piping==1){
             processPipeOperation(input);
