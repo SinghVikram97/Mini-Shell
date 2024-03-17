@@ -486,6 +486,126 @@ void processRedirection(char input[]){
     }
 }
 
+int executeCommand2(char *argsArray[]){
+    int pid = fork();
+    int status;
+
+    if (pid < 0) {
+        printf("Fork failed\n");
+        return -1;
+    }
+
+    if (pid > 0) {
+        waitpid(pid, &status, 0);
+        return 1;
+    } else {
+        int resultOfExec = execvp(argsArray[0], argsArray);
+        if (resultOfExec == -1) {
+            printf("Execution of command failed\n");
+            return -1;
+        }
+    }
+}
+
+int executeCommandWithReturnStatus(char command[]) {
+    int MAX_ARGS=5;
+    char *argsArray[MAX_ARGS + 1];
+    int argsC;
+
+    argsC = 0;
+    char *token = strtok(command, " ");
+    while (token != NULL && argsC < MAX_ARGS) {
+        argsArray[argsC++] = token;
+        token = strtok(NULL, " ");
+    }
+
+    if (token != NULL) {
+        printf("Error: Incorrect number of arguments should be >=1 and <=5\n");
+        return -1;
+    }
+
+    argsArray[argsC] = NULL;
+    expandHomeDirectory(argsArray);
+    return executeCommand2(argsArray);
+}
+
+void processAndOr(char input[]) {
+    const int MAX_COMMANDS = 6;
+    const int MAX_ARGS = 5;
+
+    char *commands[MAX_COMMANDS];
+    char operators[MAX_COMMANDS - 1]; // There will be one less operator than commands
+
+    int numCommands = 0;
+    int numOperators = 0;
+
+    // Identify and store operators
+    for (int i = 0; input[i] != '\0'; i++) {
+        if ((input[i] == '&' && input[i + 1] == '&') || (input[i] == '|' && input[i + 1] == '|')) {
+            operators[numOperators++] = input[i];
+            i++; // Skip the second character of the operator
+        }
+    }
+
+    // Tokenize the input to extract commands
+    char *token = strtok(input, "&|");
+    while (token != NULL) {
+        commands[numCommands++] = token;
+        token = strtok(NULL, "&|");
+    }
+
+    if(numCommands>MAX_COMMANDS){
+        printf("Maximum of 5 operations / 6 commands are allowed\n");
+        return;
+    }
+
+    for (int i = 0; i < numCommands; i++) {
+       trimWhitespace(commands[i]);
+    }
+
+    for(int i=0;i<numCommands;i++){
+        int status=executeCommandWithReturnStatus(commands[i]);
+
+        if(i<numOperators && operators[i]=='&'){
+            if(status!=1){
+                break;
+            }
+        }else if(i<numOperators && operators[i]=='|'){
+            if(status==1){
+                break;
+            }
+        }
+    }
+}
+
+void processSequentialCommands(char input[]){
+    const int MAX_COMMANDS = 5;
+    int numCommands = 0;
+
+    char *commands[MAX_COMMANDS];
+
+     // Tokenize the input to extract commands
+    char *token = strtok(input, ";");
+    while (token != NULL) {
+        commands[numCommands++] = token;
+        token = strtok(NULL, ";");
+    }
+
+    if(numCommands>MAX_COMMANDS){
+        printf("Maximum of 5 commands are allowed\n");
+        return;
+    }
+
+    for (int i = 0; i < numCommands; i++) {
+       trimWhitespace(commands[i]);
+    }
+
+    for(int i=0;i<numCommands;i++){
+        executeCommandWithReturnStatus(commands[i]);
+    }
+
+}
+
 int main() {
     // string
     char input[MAX_COMMAND_LENGTH];
@@ -501,17 +621,27 @@ int main() {
         int concatenate = 0;
         int piping = 0;
         int redirect = 0;
+        int and_or=0;
+        int sequential=0;
+
 
         for (int i = 0; i < strlen(input); i++) {
             if (input[i] == '|') {
-                piping = 1;
-                break;
+                if(i+1<strlen(input) && input[i+1]=='|'){
+                    and_or=1;
+                }else if(i-1>0 && input[i-1]=='|'){
+                    and_or=1; 
+                }else{
+                    piping = 1;
+                }
             } else if (input[i] == '#') {
                 concatenate = 1;
-                break;
             } else if (input[i] == '>' || input[i] == '<') {
                 redirect = 1;
-                break;
+            } else if(i+1<strlen(input) && input[i] == '&' && input[i+1] == '&'){
+                and_or=1;
+            }else if(input[i]==';'){
+                sequential=1;
             }
         }
         if(concatenate==1){
@@ -520,7 +650,12 @@ int main() {
             processPipeOperation(input);
         }else if(redirect==1){
             processRedirection(input);
-        }else{
+        }else if(and_or==1){
+            processAndOr(input);
+        }else if(sequential==1){
+            processSequentialCommands(input);
+        }
+        else{
             processNormalCommand(input);
         }
     }
