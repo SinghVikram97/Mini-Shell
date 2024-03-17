@@ -606,6 +606,48 @@ void processSequentialCommands(char input[]){
 
 }
 
+void executeCommandInBackground(char *argsArray[]){
+    int pid = fork();
+    int status;
+
+    if (pid < 0) {
+        printf("Fork failed\n");
+        exit(1);
+    }
+
+    if (pid > 0) {
+       // don't wait
+    } else {
+        int resultOfExec = execvp(argsArray[0], argsArray);
+        if (resultOfExec == -1) {
+            printf("Execution of command failed\n");
+            exit(1);
+        }
+    }
+}
+
+void processBackgroundExecution(char input[]){
+    int MAX_ARGS=5;
+    char *argsArray[MAX_ARGS + 1];
+    int argsC;
+
+    argsC = 0;
+    char *token = strtok(input, " ");
+    while (token != NULL && argsC < MAX_ARGS) {
+        argsArray[argsC++] = token;
+        token = strtok(NULL, " ");
+    }
+
+    if (token != NULL) {
+        printf("Error: Incorrect number of arguments should be >=1 and <=5\n");
+        return;
+    }
+
+    argsArray[argsC] = NULL;
+    expandHomeDirectory(argsArray);
+    executeCommandInBackground(argsArray);
+}
+
 int main() {
     // string
     char input[MAX_COMMAND_LENGTH];
@@ -623,6 +665,7 @@ int main() {
         int redirect = 0;
         int and_or=0;
         int sequential=0;
+        int backgroundProcess=0;
 
 
         for (int i = 0; i < strlen(input); i++) {
@@ -638,8 +681,14 @@ int main() {
                 concatenate = 1;
             } else if (input[i] == '>' || input[i] == '<') {
                 redirect = 1;
-            } else if(i+1<strlen(input) && input[i] == '&' && input[i+1] == '&'){
-                and_or=1;
+            } else if(input[i]=='&'){
+                if(i+1<strlen(input) && input[i+1]=='&'){
+                    and_or=1;
+                }else if(i-1>0 && input[i-1]=='&'){
+                    and_or=1; 
+                }else{
+                    backgroundProcess = 1;
+                }
             }else if(input[i]==';'){
                 sequential=1;
             }
@@ -654,6 +703,8 @@ int main() {
             processAndOr(input);
         }else if(sequential==1){
             processSequentialCommands(input);
+        }else if(backgroundProcess==1){
+            processBackgroundExecution(input);
         }
         else{
             processNormalCommand(input);
