@@ -229,7 +229,7 @@ void processFileConcatenation(char input[]){
     }
 
     if (token != NULL) {
-        printf("Error: Text file (.txt) concatenation (upto 5 operations / 6 Files)\n");
+        printf("Error: File concatenation (upto 5 operations / 6 Files)\n");
         return;
     }
 
@@ -565,17 +565,25 @@ void processAndOr(char input[]) {
        trimWhitespace(commands[i]);
     }
 
-    for(int i=0;i<numCommands;i++){
-        int status=executeCommandWithReturnStatus(commands[i]);
+    int status = 0; 
 
-        if(i<numOperators && operators[i]=='&'){
-            if(status!=1){
-                break;
-            }
-        }else if(i<numOperators && operators[i]=='|'){
-            if(status==1){
-                break;
-            }
+    if (numCommands > 0) {
+        status = executeCommandWithReturnStatus(commands[0]);
+    }
+
+    for (int i = 1; i < numCommands; i++) {
+        if (status == 1 && operators[i - 1] == '&') {
+            // Execute the command and update status
+            status = executeCommandWithReturnStatus(commands[i]);
+        } else if(status!=1 && operators[i-1]=='&'){
+            // skip command
+            continue;
+        } else if (status == 1 && operators[i - 1] == '|') {
+            // Skip the command
+            continue;
+        } else if (status != 1 && operators[i - 1] == '|') {
+            // Execute the command and update status
+            status = executeCommandWithReturnStatus(commands[i]);
         }
     }
 }
@@ -666,6 +674,11 @@ void bringLastBackgroundProcessToForeground() {
     background_process_count--;
 }
 
+void startNewShell(){
+    char *args[] = {"xterm", "-e", "./shell24", NULL};
+    executeCommandInBackground(args);
+}
+
 int main() {
     // string
     char input[MAX_COMMAND_LENGTH];
@@ -710,7 +723,10 @@ int main() {
                 sequential=1;
             }
         }
-        if(strcmp("fg",input)==0){
+        if(strcmp("newt",input)==0){
+            startNewShell();
+        }
+        else if(strcmp("fg",input)==0){
             bringLastBackgroundProcessToForeground();
         }
         else if(concatenate==1){
