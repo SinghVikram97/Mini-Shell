@@ -633,6 +633,7 @@ int executeCommand2(char *argsArray[]){
     if (pid > 0) {
         // Wait for child to execute
         waitpid(pid, &status, 0);
+        printf("HERE\n");
         return 1;
     } else {
         // execvp returns only if command fails and returns -1
@@ -678,18 +679,12 @@ int executeCommandWithReturnStatus(char command[]) {
     return executeCommand2(argsArray);
 }
 
-// Function to process commands separated by && and || operators
-// Parameters:
-// - input: String containing commands and operators separated by && and || symbols
 void processAndOr(char input[]) {
-    // Since max 5 operations are allowed 5 &&/|| means 6 commands
     const int MAX_COMMANDS = 6;
-    // Maximum number of arguments per command
     const int MAX_ARGS = 5;
 
     char *commands[MAX_COMMANDS];
-    // There will be one less operator than commands
-    char operators[MAX_COMMANDS - 1]; 
+    char operators[MAX_COMMANDS - 1]; // There will be one less operator than commands
 
     int numCommands = 0;
     int numOperators = 0;
@@ -709,46 +704,40 @@ void processAndOr(char input[]) {
         token = strtok(NULL, "&|");
     }
 
-    // If number of commands > max commands print error and exit
     if(numCommands>MAX_COMMANDS){
         printf("Maximum of 5 operations / 6 commands are allowed\n");
         return;
     }
 
-    // Trim whitespace from each command
     for (int i = 0; i < numCommands; i++) {
        trimWhitespace(commands[i]);
     }
 
     int status = 0; 
-    // Execute the first command and get its status
+
     if (numCommands > 0) {
         status = executeCommandWithReturnStatus(commands[0]);
+        printf("STATUS: %d\n",status);
     }
 
-    // Process rest of the commands based on operators and previous command status
     for (int i = 1; i < numCommands; i++) {
         if (status == 1 && operators[i - 1] == '&') {
-            // Execute the command and update status if the previous command succeeded and operator is &&
+            // Execute the command and update status
             status = executeCommandWithReturnStatus(commands[i]);
         } else if(status!=1 && operators[i-1]=='&'){
-            // Skip the command if the previous command failed and operator is &&
+            // skip command
             continue;
         } else if (status == 1 && operators[i - 1] == '|') {
-            // Skip the command if the previous command succeeded and operator is ||
+            // Skip the command
             continue;
         } else if (status != 1 && operators[i - 1] == '|') {
-            // Execute the command and update status if the previous command failed and operator is ||
+            // Execute the command and update status
             status = executeCommandWithReturnStatus(commands[i]);
         }
     }
 }
 
-// Function to process sequential commands separated by semicolons
-// Parameters:
-// - input: String containing sequential commands separated by semicolons
 void processSequentialCommands(char input[]){
-    // Max commands will be 5
     const int MAX_COMMANDS = 5;
     int numCommands = 0;
 
@@ -761,29 +750,22 @@ void processSequentialCommands(char input[]){
         token = strtok(NULL, ";");
     }
 
-    // If number of commands > 5 then print error
     if(numCommands>MAX_COMMANDS){
         printf("Maximum of 5 commands are allowed\n");
         return;
     }
 
-    // Trim whitespace from each command
     for (int i = 0; i < numCommands; i++) {
        trimWhitespace(commands[i]);
     }
 
-    // Execute each command sequentially
     for(int i=0;i<numCommands;i++){
         executeCommandWithReturnStatus(commands[i]);
     }
 
 }
 
-// Function to execute a command in the background
-// Parameters:
-// - argsArray: Array of strings containing the command and its arguments
 void executeCommandInBackground(char *argsArray[]){
-    // Fork new process
     int pid = fork();
     int status;
 
@@ -793,13 +775,8 @@ void executeCommandInBackground(char *argsArray[]){
     }
 
     if (pid > 0) {
-    // Parent process
-       // Add child process ID to the background_processes array
-       // Don't wait for child - keep it running in background
        background_processes[background_process_count++] = pid;
     } else {
-        // Child process
-        // Execute the command
         int resultOfExec = execvp(argsArray[0], argsArray);
         if (resultOfExec == -1) {
             printf("Execution of command failed\n");
@@ -808,46 +785,34 @@ void executeCommandInBackground(char *argsArray[]){
     }
 }
 
-// Function to process background execution of a command
-// Parameters:
-// - input: String containing the command and its arguments
 void processBackgroundExecution(char input[]){
     int MAX_ARGS=5;
     char *argsArray[MAX_ARGS + 1];
     int argsC;
 
     argsC = 0;
-    // Tokenize by space to extract command and its arguments
     char *token = strtok(input, " ");
     while (token != NULL && argsC < MAX_ARGS) {
         argsArray[argsC++] = token;
         token = strtok(NULL, " ");
     }
 
-    // Check if more arguments present after tokenization
     if (token != NULL) {
         printf("Error: Incorrect number of arguments should be >=1 and <=5\n");
         return;
     }
 
     argsArray[argsC] = NULL;
-
-    // Replace ~ with $HOME ie. user home
     expandHomeDirectory(argsArray);
-
-    // Execute command in background
     executeCommandInBackground(argsArray);
 }
 
-// Function to bring the last background process to the foreground
 void bringLastBackgroundProcessToForeground() {
-    // Function to bring the last background process to the foreground
     if (background_process_count == 0) {
         printf("No background processes to bring to foreground\n");
         return;
     }
 
-    // Get the PID of the last background process
     int pid = background_processes[background_process_count - 1];
     int status;
 
@@ -858,83 +823,61 @@ void bringLastBackgroundProcessToForeground() {
     background_process_count--;
 }
 
-// Function to start a new shell in the background
 void startNewShell(){
-    // Arguments to start a new shell using xterm
     char *args[] = {"xterm", "-e", "./shell24", NULL};
-
-    // Start new shell
     executeCommandInBackground(args);
 }
 
 int main() {
-    // get user input in an array
+    // string
     char input[MAX_COMMAND_LENGTH];
 
-    // infinite loop for shell
     while (1) {
-        // print shell prompt and wait for user input
         printf("shell24$ ");
-
-        // take user input
         fgets(input, sizeof(input), stdin);
 
-        // Remove trailing newline character
         if (input[strlen(input) - 1] == '\n') {
             input[strlen(input) - 1] = '\0';
         }
+        int concatenate = 0;
+        int piping = 0;
+        int redirect = 0;
+        int and_or=0;
+        int sequential=0;
+        int backgroundProcess=0;
 
-        // Flags to identify the type of command
-        int concatenate = 0; // File concatenation
-        int piping = 0;  // Pipe operation
-        int redirect = 0; // Input/Ouput redirection
-        int and_or=0; // && and || 
-        int sequential=0; // ; Sequential execution
-        int backgroundProcess=0; // Execute in backgroun
 
-        // Traverse through input
         for (int i = 0; i < strlen(input); i++) {
             if (input[i] == '|') {
-                // if double '|' then it is OR
                 if(i+1<strlen(input) && input[i+1]=='|'){
                     and_or=1;
                 }else if(i-1>0 && input[i-1]=='|'){
                     and_or=1; 
                 }else{
-                    // Single '|' means pipe
                     piping = 1;
                 }
             } else if (input[i] == '#') {
-                // # means file concatenation
                 concatenate = 1;
             } else if (input[i] == '>' || input[i] == '<') {
-                // if > or < or >> it means input/output redirection
                 redirect = 1;
             } else if(input[i]=='&'){
-                // Double '&' means AND
-                 if(i+1<strlen(input) && input[i+1]=='&'){
+                if(i+1<strlen(input) && input[i+1]=='&'){
                     and_or=1;
                 }else if(i-1>0 && input[i-1]=='&'){
                     and_or=1; 
                 }else{
-                    // Single '&' means run in background
                     backgroundProcess = 1;
                 }
             }else if(input[i]==';'){
-                // ; means run sequentially
                 sequential=1;
             }
         }
-
-        // if newt it means open a new shell
         if(strcmp("newt",input)==0){
             startNewShell();
         }
-        // bring last background process to foreground
         else if(strcmp("fg",input)==0){
             bringLastBackgroundProcessToForeground();
         }
-        // Execute functions based on their type of input
         else if(concatenate==1){
             processFileConcatenation(input);
         }else if(piping==1){
