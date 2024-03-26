@@ -74,7 +74,7 @@ void executeCommand(char *argsArray[]) {
         // it returns -1
         int resultOfExec = execvp(argsArray[0], argsArray);
         if (resultOfExec == -1) {
-            printf("Execution of command failed\n");
+            printf("Execution of command failed %s\n",argsArray[0]);
             exit(1);
         }
     }
@@ -241,7 +241,7 @@ void processPipeOperation(char input[]) {
 
             // Execute the command
             if (execvp(argsArray[0], argsArray) == -1) {
-                perror("Execution of command failed");
+                printf("Execution of command failed %s\n",argsArray[0]);
                 exit(EXIT_FAILURE);
             }
         }
@@ -391,7 +391,7 @@ void processNormalCommandWithInputFile(char *command, char *inputFile){
 
         // Execute the command
         if (execvp(argsArray[0], argsArray) == -1) {
-            perror("Execution of command failed");
+            printf("Execution of command failed %s\n",argsArray[0]);
             exit(EXIT_FAILURE);
         }
     } else {
@@ -454,7 +454,7 @@ void processNormalCommandWithOutputFile(char *command, char *outputFile){
 
     if (pid == 0) {
         // Child process
-        // Redirect standard input to the input file
+        // Redirect standard output to the output file
         if (dup2(fd, STDOUT_FILENO) == -1) {
             printf("Error redirecting input\n");
             close(fd);
@@ -466,7 +466,7 @@ void processNormalCommandWithOutputFile(char *command, char *outputFile){
 
         // Execute the command
         if (execvp(argsArray[0], argsArray) == -1) {
-            perror("Execution of command failed");
+            printf("Execution of command failed %s\n",argsArray[0]);
             exit(EXIT_FAILURE);
         }
     } else {
@@ -529,7 +529,7 @@ void processNormalCommandWithAppendOutputFile(char *command, char *outputFile){
 
     if (pid == 0) {
         // Child process
-        // Redirect standard input to the input file
+        // Redirect standard output to the output file
         if (dup2(fd, STDOUT_FILENO) == -1) {
             printf("Error redirecting input\n");
             close(fd);
@@ -541,7 +541,7 @@ void processNormalCommandWithAppendOutputFile(char *command, char *outputFile){
 
         // Execute the command
         if (execvp(argsArray[0], argsArray) == -1) {
-            perror("Execution of command failed");
+            printf("Execution of command failed %s\n",argsArray[0]);
             exit(EXIT_FAILURE);
         }
     } else {
@@ -638,7 +638,7 @@ int executeCommand2(char *argsArray[]){
         // execvp returns only if command fails and returns -1
         int resultOfExec = execvp(argsArray[0], argsArray);
         if (resultOfExec == -1) {
-            printf("Execution of command failed\n");
+            printf("Execution of command failed %s\n",argsArray[0]);
             return -1;
         }
     }
@@ -782,7 +782,7 @@ void processSequentialCommands(char input[]){
 // Function to execute a command in the background
 // Parameters:
 // - argsArray: Array of strings containing the command and its arguments
-void executeCommandInBackground(char *argsArray[]){
+void executeCommandInBackground(char *argsArray[], int isShell){
     // Fork new process
     int pid = fork();
     int status;
@@ -793,16 +793,18 @@ void executeCommandInBackground(char *argsArray[]){
     }
 
     if (pid > 0) {
-    // Parent process
+       // Parent process
        // Add child process ID to the background_processes array
        // Don't wait for child - keep it running in background
-       background_processes[background_process_count++] = pid;
+       if(isShell!=1){
+            background_processes[background_process_count++] = pid;
+       }
     } else {
         // Child process
         // Execute the command
         int resultOfExec = execvp(argsArray[0], argsArray);
         if (resultOfExec == -1) {
-            printf("Execution of command failed\n");
+            printf("Execution of command failed %s\n",argsArray[0]);
             exit(1);
         }
     }
@@ -836,7 +838,7 @@ void processBackgroundExecution(char input[]){
     expandHomeDirectory(argsArray);
 
     // Execute command in background
-    executeCommandInBackground(argsArray);
+    executeCommandInBackground(argsArray,0);
 }
 
 // Function to bring the last background process to the foreground
@@ -864,7 +866,7 @@ void startNewShell(){
     char *args[] = {"xterm", "-e", "./shell24", NULL};
 
     // Start new shell
-    executeCommandInBackground(args);
+    executeCommandInBackground(args,1);
 }
 
 int main() {
@@ -890,7 +892,7 @@ int main() {
         int redirect = 0; // Input/Ouput redirection
         int and_or=0; // && and || 
         int sequential=0; // ; Sequential execution
-        int backgroundProcess=0; // Execute in backgroun
+        int backgroundProcess=0; // Execute in background
 
         // Traverse through input
         for (int i = 0; i < strlen(input); i++) {
